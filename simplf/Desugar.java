@@ -2,7 +2,6 @@ package simplf;
 
 import java.util.ArrayList;
 import java.util.List;
-
 import simplf.Expr.Assign;
 import simplf.Expr.Binary;
 import simplf.Expr.Call;
@@ -82,7 +81,21 @@ public class Desugar implements Expr.Visitor<Expr>, Stmt.Visitor<Stmt> {
 
     @Override
     public Stmt visitForStmt(For stmt) {
-        throw new UnsupportedOperationException("TODO: desugar for loops");
+        Stmt body = stmt.body.accept(this);
+
+        if (stmt.incr!= null) {
+            body = new Block(java.util.List.of(body, new Stmt.Expression(stmt.incr.accept(this))));
+        }
+        Expr condition = stmt.cond != null ? stmt.cond.accept(this) : new Expr.Literal(true);
+        Stmt whileloop = new While(condition, body);
+
+        if(stmt.init != null) {
+            Stmt init = new Stmt.Expression(stmt.init.accept(this));
+            return new Block(java.util.List.of(init, whileloop));
+        }
+        
+        return whileloop;
+        
     }
 
     @Override
