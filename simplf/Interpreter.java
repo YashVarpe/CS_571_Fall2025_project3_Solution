@@ -51,7 +51,10 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Object> {
         environment = new Environment(previous);
         try {
             for (Stmt s : stmt.statements) {
-                execute(s);
+                Object result = execute(s);
+                if (result != null) {
+                    return result; 
+                }
             }
         } finally {
             environment = previous;
@@ -63,9 +66,9 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Object> {
     public Object visitIfStmt(Stmt.If stmt) {
         Object condition = evaluate(stmt.cond);
         if (isTruthy(condition)) {
-            execute(stmt.thenBranch);
+            return execute(stmt.thenBranch);
         } else if (stmt.elseBranch != null) {
-            execute(stmt.elseBranch);
+            return execute(stmt.elseBranch);
         }
         return null;
     }
@@ -73,7 +76,10 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Object> {
     @Override
     public Object visitWhileStmt(Stmt.While stmt) {
         while (isTruthy(evaluate(stmt.cond))) {
-            execute(stmt.body);
+            Object result = execute(stmt.body); // <-- FIX: Get the result
+            if (result != null) {
+                return result; // <-- FIX: Propagate the return value
+            }
         }
         return null;
     }
