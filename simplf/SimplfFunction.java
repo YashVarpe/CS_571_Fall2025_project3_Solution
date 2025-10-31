@@ -1,5 +1,5 @@
 package simplf;
-
+ 
 import java.util.List;
 
 class SimplfFunction implements SimplfCallable {
@@ -17,35 +17,18 @@ class SimplfFunction implements SimplfCallable {
 
     @Override
     public Object call(Interpreter interpreter, List<Object> args) {
-        Environment localEnv = new Environment(closure);
-
+        Environment callEnv = new Environment(closure);
         for (int i = 0; i < declaration.params.size(); i++) {
             Token param = declaration.params.get(i);
-            localEnv.define(param, param.lexeme, args.get(i));
+            Object argVal = i < args.size() ? args.get(i) : null;
+            callEnv.define(param, param.lexeme, argVal);
         }
-
-        Object result = null;
-        Environment previous = interpreter.environment; 
-        try {
-            interpreter.environment = localEnv;
-            for (Stmt stmt : declaration.body) {
-                result = interpreter.execute(stmt); 
-
-                
-                if (result != null) {
-                    break; 
-                }
-            }
-        } finally {
-            interpreter.environment = previous; 
-        }
-
-        return result; 
+        return interpreter.executeBlock(declaration.body, callEnv);
     }
 
     @Override
     public String toString() {
-        
-        return "<fn ";
+        return "<fn >";
     }
+
 }

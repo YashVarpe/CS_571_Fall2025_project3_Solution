@@ -6,7 +6,7 @@ import simplf.Stmt.For;
 
 class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Object> {
     public Environment globals = new Environment();
-    Environment environment = globals;
+    private Environment environment = globals;
 
     Interpreter() {
 
@@ -24,8 +24,7 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Object> {
 
     @Override
     public Object visitExprStmt(Stmt.Expression stmt) {
-        Object value = evaluate(stmt.expr);
-        return null;
+        return evaluate(stmt.expr);
     }
 
     @Override
@@ -41,31 +40,24 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Object> {
         if (stmt.initializer != null) {
             value = evaluate(stmt.initializer);
         }
-        environment.define(stmt.name, stmt.name.lexeme,value);
+        environment.define(stmt.name, stmt.name.lexeme, value);
         return null;
     }
 
     @Override
     public Object visitBlockStmt(Stmt.Block stmt) {
-        Environment previous = environment;
-        environment = new Environment(previous);
+        Environment previous = this.environment;
         try {
-            for (Stmt s : stmt.statements) {
-                Object result = execute(s);
-                if (result != null) {
-                    return result; 
-                }
-            }
+            this.environment = new Environment(previous);
+            return executeBlock(stmt.statements, this.environment);
         } finally {
-            environment = previous;
+            this.environment = previous;
         }
-        return null;
     }
 
     @Override
     public Object visitIfStmt(Stmt.If stmt) {
-        Object condition = evaluate(stmt.cond);
-        if (isTruthy(condition)) {
+        if (isTruthy(evaluate(stmt.cond))) {
             return execute(stmt.thenBranch);
         } else if (stmt.elseBranch != null) {
             return execute(stmt.elseBranch);
@@ -75,13 +67,11 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Object> {
 
     @Override
     public Object visitWhileStmt(Stmt.While stmt) {
+        Object last = null;
         while (isTruthy(evaluate(stmt.cond))) {
-            Object result = execute(stmt.body); // <-- FIX: Get the result
-            if (result != null) {
-                return result; // <-- FIX: Propagate the return value
-            }
+            last = execute(stmt.body);
         }
-        return null;
+        return last;
     }
 
     @Override
@@ -91,7 +81,7 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Object> {
 
     @Override
     public Object visitFunctionStmt(Stmt.Function stmt) {
-        SimplfFunction function = new SimplfFunction(stmt, environment);
+        SimplfFunction function = new SimplfFunction(stmt, this.environment);
         environment.define(stmt.name, stmt.name.lexeme, function);
         return null;
     }
@@ -191,15 +181,14 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Object> {
     @Override
     public Object visitCallExpr(Expr.Call expr) {
         Object callee = evaluate(expr.callee);
-        java.util.List<Object> arguments = new java.util.ArrayList<>();
+        if (!(callee instanceof SimplfCallable)) {
+            throw new RuntimeError(expr.paren, "Can only call functions and lambdas.");
+        }
+        java.util.ArrayList<Object> arguments = new java.util.ArrayList<>();
         for (Expr argument : expr.args) {
             arguments.add(evaluate(argument));
         }
-        if (!(callee instanceof SimplfCallable)) {
-            throw new RuntimeError(expr.paren, "Can only call functions.");
-        }
-        SimplfCallable function = (SimplfCallable) callee;
-        return function.call(this, arguments);
+        return ((SimplfCallable) callee).call(this, arguments);
     }
 
     private Object evaluate(Expr expr) {
@@ -222,7 +211,7 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Object> {
         }
     }
 
-    Object execute(Stmt stmt) {
+    private Object execute(Stmt stmt) {
         return stmt.accept(this);
     }
 
@@ -269,8 +258,40 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Object> {
 
     @Override
     public Object visitLambda(Lambda expr) {
-        throw new UnsupportedOperationException("TODO: implement variable references");
+        Environment closure = this.environment;
+        return new SimplfCallable() {
+            @Override
+            public Object call(Interpreter interpreter, java.util.List<Object> args) {
+                Environment callEnv = new Environment(closure);
+                for (int i = 0; i < expr.params.size(); i++) {
+                    Token param = expr.params.get(i);
+                    Object argVal = i < args.size() ? args.get(i) : null;
+                    callEnv.define(param, param.lexeme, argVal);
+                }
+                return interpreter.evaluateInEnvironment(expr.body, callEnv);
+            }
+        };
     }
-
-
+    public Object executeBlock(java.util.List<Stmt> statements, Environment env) {
+        Environment previous = this.environment;
+        Object last = null;
+        try {
+            this.environment = env;
+            for (Stmt statement : statements) {
+                last = execute(statement);
+            }
+        } finally {
+            this.environment = previous;
+        }
+        return last;
+    }
+    public Object evaluateInEnvironment(Expr expr, Environment env) {
+        Environment previous = this.environment;
+        try {
+            this.environment = env;
+            return evaluate(expr);
+        } finally {
+            this.environment = previous;
+        }
+    }
 } 
